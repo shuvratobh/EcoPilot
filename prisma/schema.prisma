@@ -1,0 +1,421 @@
+// EcoPilot — Prisma Schema
+// Based on: docs/10_DATABASE_SCHEMA.md (v1.1)
+// Architecture decision: ADR-016 — Unified ResourceLog table
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ── Enums ──────────────────────────────────────────────────────────────────────
+
+enum ResourceType {
+  Electricity
+  Water
+  Paper
+  Waste
+  Recycling
+}
+
+enum UserRole {
+  OrganizationOwner
+  CompanyAdmin
+  DepartmentManager
+  Employee
+}
+
+enum DocumentStatus {
+  Pending
+  Processing
+  Completed
+  Failed
+}
+
+enum GoalStatus {
+  Active
+  Achieved
+  Missed
+  Cancelled
+}
+
+enum ReportType {
+  Monthly
+  Quarterly
+  Annual
+  Executive
+  Custom
+}
+
+enum ReportFormat {
+  PDF
+  Excel
+}
+
+enum NotificationType {
+  AIInsight
+  GoalAlert
+  SystemAlert
+  DocumentProcessed
+  ReportReady
+  Welcome
+}
+
+enum AuditAction {
+  Login
+  Logout
+  RoleChange
+  PermissionChange
+  DocumentUpload
+  GoalUpdate
+  ReportGeneration
+  AIReportCreation
+  OrganizationUpdate
+}
+
+// ── Organization ───────────────────────────────────────────────────────────────
+
+model Organization {
+  id                  String   @id @default(cuid())
+  name                String
+  slug                String   @unique
+  industry            String?
+  employeeCount       Int?
+  officeSizeM2        Float?
+  sustainabilityTarget Float?
+  logoUrl             String?
+  websiteUrl          String?
+  isOnboardingComplete Boolean @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  deletedAt           DateTime?
+
+  // Relations
+  settings            Settings?
+  users               OrganizationUser[]
+  departments         Department[]
+  resourceLogs        ResourceLog[]
+  documents           Document[]
+  goals               Goal[]
+  goalProgress        GoalProgress[]
+  ecoScoreHistory     EcoScoreHistory[]
+  reports             Report[]
+  notifications       Notification[]
+  aiConversations     AIConversation[]
+  auditLogs           AuditLog[]
+
+  @@index([slug])
+  @@index([deletedAt])
+  @@map("organizations")
+}
+
+// ── Settings ───────────────────────────────────────────────────────────────────
+
+model Settings {
+  id                    String  @id @default(cuid())
+  organizationId        String  @unique
+  emissionFactorRegion  String  @default("BD")
+  currency              String  @default("BDT")
+  timezone              String  @default("Asia/Dhaka")
+  theme                 String  @default("system")
+  aiProvider            String  @default("gemini")
+  notificationsEnabled  Boolean @default(true)
+  weeklyReportEnabled   Boolean @default(false)
+  monthlyReportEnabled  Boolean @default(true)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("settings")
+}
+
+// ── Department ─────────────────────────────────────────────────────────────────
+
+model Department {
+  id             String    @id @default(cuid())
+  organizationId String
+  name           String
+  code           String?
+  headCount      Int?
+  managerId      String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  users        OrganizationUser[]
+  resourceLogs ResourceLog[]
+  goals        Goal[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+  @@index([deletedAt])
+  @@map("departments")
+}
+
+// ── User ───────────────────────────────────────────────────────────────────────
+
+model OrganizationUser {
+  id             String    @id @default(cuid())
+  organizationId String
+  userId         String    // Supabase Auth UUID
+  departmentId   String?
+  role           UserRole  @default(Employee)
+  email          String
+  name           String
+  avatarUrl      String?
+  joinedAt       DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  department   Department?  @relation(fields: [departmentId], references: [id])
+
+  @@unique([organizationId, userId])
+  @@unique([organizationId, email])
+  @@index([organizationId])
+  @@index([userId])
+  @@index([deletedAt])
+  @@map("organization_users")
+}
+
+// ── Resource Log (ADR-016: Unified table) ─────────────────────────────────────
+
+model ResourceLog {
+  id             String       @id @default(cuid())
+  organizationId String
+  departmentId   String?
+  resourceType   ResourceType
+  quantity       Float
+  unit           String
+  cost           Float?
+  currency       String       @default("BDT")
+  period         DateTime     // First day of the billing period
+  notes          String?
+  documentId     String?      // Source document if uploaded
+  recordedBy     String       // OrganizationUser.userId
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  department   Department?  @relation(fields: [departmentId], references: [id])
+
+  @@index([organizationId, resourceType])
+  @@index([organizationId, period])
+  @@index([departmentId, resourceType])
+  @@index([deletedAt])
+  @@map("resource_logs")
+}
+
+// ── Document ───────────────────────────────────────────────────────────────────
+
+model Document {
+  id              String         @id @default(cuid())
+  organizationId  String
+  uploadedBy      String         // OrganizationUser.userId
+  fileName        String
+  fileSize        Int
+  mimeType        String
+  storagePath     String         // Supabase Storage path
+  status          DocumentStatus @default(Pending)
+  analysisResult  Json?          // Structured AI analysis output
+  errorMessage    String?
+  processedAt     DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  deletedAt       DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([organizationId, status])
+  @@index([deletedAt])
+  @@map("documents")
+}
+
+// ── EcoScore History ───────────────────────────────────────────────────────────
+
+model EcoScoreHistory {
+  id              String   @id @default(cuid())
+  organizationId  String
+  departmentId    String?
+  period          DateTime // First day of the month
+  overallScore    Float
+  energyScore     Float
+  waterScore      Float
+  paperScore      Float
+  wasteScore      Float
+  carbonScore     Float
+  dataCompleteness Float   @default(0)
+  confidence      String   @default("Medium") // High | Medium | Low
+  bonusPoints     Float    @default(0)
+  penaltyPoints   Float    @default(0)
+  calculatedAt    DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, departmentId, period])
+  @@index([organizationId, period])
+  @@map("eco_score_history")
+}
+
+// ── Goal ───────────────────────────────────────────────────────────────────────
+
+model Goal {
+  id             String     @id @default(cuid())
+  organizationId String
+  departmentId   String?
+  title          String
+  description    String?
+  resourceType   ResourceType?
+  targetValue    Float
+  currentValue   Float      @default(0)
+  unit           String
+  status         GoalStatus @default(Active)
+  startDate      DateTime
+  endDate        DateTime
+  createdBy      String     // OrganizationUser.userId
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  department   Department?   @relation(fields: [departmentId], references: [id])
+  progress     GoalProgress[]
+
+  @@index([organizationId])
+  @@index([organizationId, status])
+  @@index([deletedAt])
+  @@map("goals")
+}
+
+// ── Goal Progress ──────────────────────────────────────────────────────────────
+
+model GoalProgress {
+  id             String   @id @default(cuid())
+  goalId         String
+  organizationId String
+  value          Float
+  notes          String?
+  recordedAt     DateTime @default(now())
+  createdBy      String   // OrganizationUser.userId
+
+  goal         Goal         @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([goalId])
+  @@index([organizationId, recordedAt])
+  @@map("goal_progress")
+}
+
+// ── Report ─────────────────────────────────────────────────────────────────────
+
+model Report {
+  id             String       @id @default(cuid())
+  organizationId String
+  title          String
+  type           ReportType
+  format         ReportFormat @default(PDF)
+  periodStart    DateTime
+  periodEnd      DateTime
+  storagePath    String?      // Supabase Storage path to generated file
+  status         String       @default("Generating") // Generating | Ready | Failed
+  generatedBy    String       // OrganizationUser.userId
+  aiGenerated    Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([organizationId, type])
+  @@index([deletedAt])
+  @@map("reports")
+}
+
+// ── Notification ───────────────────────────────────────────────────────────────
+
+model Notification {
+  id             String           @id @default(cuid())
+  organizationId String
+  userId         String           // Target OrganizationUser.userId
+  type           NotificationType
+  title          String
+  message        String
+  isRead         Boolean          @default(false)
+  metadata       Json?            // Flexible payload (entity ID, etc.)
+  createdAt      DateTime         @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, userId])
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+// ── AI Conversation ────────────────────────────────────────────────────────────
+
+model AIConversation {
+  id             String   @id @default(cuid())
+  organizationId String
+  userId         String   // OrganizationUser.userId
+  threadId       String   // Groups related messages; cuid()
+  role           String   // "user" | "assistant"
+  content        String
+  mode           String   // "chat" | "analysis" | "report" | "recommendation"
+  contextSummary Json?    // What context was included
+  tokenCount     Int?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, threadId])
+  @@index([userId, createdAt])
+  @@map("ai_conversations")
+}
+
+// ── Audit Log ──────────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id             String      @id @default(cuid())
+  organizationId String
+  actorId        String      // OrganizationUser.userId
+  action         AuditAction
+  entityType     String?     // e.g. "Document", "Goal"
+  entityId       String?
+  metadata       Json?       // Additional context
+  ipAddress      String?
+  userAgent      String?
+  createdAt      DateTime    @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([organizationId, actorId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ── Emission Factor ────────────────────────────────────────────────────────────
+
+model EmissionFactor {
+  id            String       @id @default(cuid())
+  regionCode    String
+  resourceType  ResourceType
+  factorValue   Float        // e.g. 0.582
+  unit          String       // e.g. "kg CO2e/kWh"
+  sourceName    String       // e.g. "Bangladesh PGCB 2026"
+  sourceUrl     String?
+  effectiveYear Int
+  isActive      Boolean      @default(true)
+  createdAt     DateTime     @default(now())
+
+  @@unique([regionCode, resourceType, effectiveYear])
+  @@index([regionCode, resourceType, isActive])
+  @@map("emission_factors")
+}

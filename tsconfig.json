@@ -1,0 +1,55 @@
+{
+  "compilerOptions": {
+    // ── Strictness ──────────────────────────────────────────────────────
+    "strict": true,
+    "noImplicitAny": true,
+    "noImplicitReturns": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "exactOptionalPropertyTypes": false,
+
+    // ── Module Resolution ───────────────────────────────────────────────
+    "target": "ES2017",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "allowJs": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "preserve",
+
+    // ── Emit ────────────────────────────────────────────────────────────
+    "noEmit": true,
+    "incremental": true,
+
+    // ── Interop ─────────────────────────────────────────────────────────
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+
+    // ── Path Aliases ────────────────────────────────────────────────────
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@components/*": ["./src/components/*"],
+      "@features/*": ["./src/features/*"],
+      "@lib/*": ["./src/lib/*"],
+      "@types/*": ["./src/types/*"],
+      "@hooks/*": ["./src/hooks/*"],
+      "@constants/*": ["./src/constants/*"],
+      "@config/*": ["./src/config/*"]
+    },
+
+    // ── Plugins ─────────────────────────────────────────────────────────
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+
+    // ── Next.js ─────────────────────────────────────────────────────────
+    "skipLibCheck": true
+  },
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "exclude": ["node_modules", ".next", "out", "dist", "coverage"]
+}
