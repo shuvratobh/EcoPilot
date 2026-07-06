@@ -9,12 +9,16 @@
  * Providers included:
  * - ThemeProvider (next-themes) — light/dark/system
  * - Toaster (sonner) — toast notifications
+ * - AuthProvider — Supabase authentication
+ * - OrganizationProvider — Active organization context
  *
  * Note: React Query / TanStack Query will be added in Phase 1.
  */
 
 import { ThemeProvider } from "next-themes";
 import { Toaster } from "sonner";
+import { AuthProvider } from "@/features/auth/components/AuthProvider";
+import { OrganizationProvider } from "@/features/organization/components/OrganizationProvider";
 
 interface ProvidersProps {
   children: React.ReactNode;
@@ -28,7 +32,11 @@ export function Providers({ children }: ProvidersProps) {
       enableSystem
       disableTransitionOnChange
     >
-      {children}
+      <AuthProvider>
+        <OrganizationProvider>
+          {children}
+        </OrganizationProvider>
+      </AuthProvider>
       <Toaster
         position="bottom-right"
         richColors

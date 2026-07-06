@@ -3,9 +3,8 @@
  *
  * Responsibilities:
  * 1. Refresh Supabase auth session on every request
- * 2. Redirect unauthenticated users to /login
- * 3. Redirect authenticated users to /onboarding if org has no data
- * 4. Protect all /api/v1/* routes
+ * 2. Redirect unauthenticated users to /auth/login
+ * 3. Protect all /api/v1/* routes
  *
  * Based on: docs/09_SYSTEM_ARCHITECTURE.md — Middleware
  * Based on: docs/04_INFORMATION_ARCHITECTURE.md — Onboarding Flow
@@ -16,14 +15,39 @@ import { updateSession } from "@/lib/supabase/middleware";
 
 // ── Route Configuration ───────────────────────────────────────────────────────
 
-const PUBLIC_ROUTES = ["/", "/pricing", "/login", "/register", "/forgot-password", "/reset-password"];
-const AUTH_ROUTES = ["/login", "/register", "/forgot-password", "/reset-password"];
+const PUBLIC_ROUTES = [
+  "/",
+  "/pricing",
+  "/auth/login",
+  "/auth/register",
+  "/auth/forgot-password",
+  "/auth/reset-password",
+];
+const AUTH_ROUTES = [
+  "/auth/login",
+  "/auth/register",
+  "/auth/forgot-password",
+  "/auth/reset-password",
+];
+
+// Define paths that explicitly require authentication
+const PROTECTED_PREFIXES = [
+  "/app",
+  "/dashboard",
+  "/settings",
+  "/reports",
+];
+
 function isPublicRoute(pathname: string): boolean {
   return PUBLIC_ROUTES.some((route) => pathname === route || pathname.startsWith("/api/v1/auth"));
 }
 
 function isAuthRoute(pathname: string): boolean {
   return AUTH_ROUTES.some((route) => pathname.startsWith(route));
+}
+
+function isProtectedRoute(pathname: string): boolean {
+  return PROTECTED_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 }
 
 // ── Middleware ────────────────────────────────────────────────────────────────
@@ -53,10 +77,12 @@ export async function middleware(request: NextRequest) {
   }
 
   // ── Protected routes: require authentication ──────────────────────────────
-  if (!user) {
-    const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("redirectTo", pathname);
-    return NextResponse.redirect(loginUrl);
+  if (isProtectedRoute(pathname)) {
+    if (!user) {
+      const loginUrl = new URL("/auth/login", request.url);
+      loginUrl.searchParams.set("redirectTo", pathname);
+      return NextResponse.redirect(loginUrl);
+    }
   }
 
   // ── Onboarding check is handled by the onboarding page itself ─────────────
